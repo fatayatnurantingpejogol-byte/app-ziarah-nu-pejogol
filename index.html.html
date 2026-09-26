@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aplikasi Ziarah NU Pejogol 2026</title>
+    
+    <!-- Tailwind CSS untuk Styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- html2canvas untuk fitur unduh denah -->
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+    
+    <!-- Babel untuk menerjemahkan JSX/React di browser -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Import Map: Menggunakan Server Resmi Google untuk Firebase -->
+    <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@18.2.0",
+        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+        "lucide-react": "https://esm.sh/lucide-react@0.292.0",
+        "firebase/app": "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js",
+        "firebase/firestore": "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js",
+        "firebase/auth": "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js"
+      }
+    }
+    </script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+        import React, { useState, useEffect, useRef } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import { initializeApp } from 'firebase/app';
+        import { getFirestore, collection, doc, setDoc, onSnapshot, deleteDoc, addDoc } from 'firebase/firestore';
+        import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+        import { 
+          Users, PlusCircle, Armchair, Edit2, Trash2, Layout, Search, 
+          Download, Wallet2, Camera, ArrowUpRight, ArrowDownLeft, 
+          Calendar, FileSpreadsheet, AlertTriangle
+        } from 'lucide-react';
+
+        // Deteksi jika dibuka langsung dari direktori lokal (tanpa web server)
+        if (window.location.protocol === 'file:') {
+            alert("⚠️ PERINGATAN BROWSER: Anda membuka aplikasi ini langsung dari folder (file:///).\n\nFirebase memblokir akses database dan autentikasi jika tidak dijalankan menggunakan Web Server (http/https). Silakan jalankan menggunakan 'Live Server' di VS Code atau upload ke web hosting.");
+        }
+
+        // KONFIGURASI FIREBASE ANDA
+        const firebaseConfig = {
+          apiKey: "AIzaSyAodlZeZ0RA1lS3FhbgZ4txia8uCAkG54c",
+          authDomain: "ziarah-nu-pejogol-ec843.firebaseapp.com",
+          databaseURL: "https://ziarah-nu-pejogol-ec843-default-rtdb.asia-southeast1.firebasedatabase.app",
+          projectId: "ziarah-nu-pejogol-ec843",
+          storageBucket: "ziarah-nu-pejogol-ec843.firebasestorage.app",
+          messagingSenderId: "1038366701983",
+          appId: "1:1038366701983:web:7e85fd64f57cde6908e5aa",
+          measurementId: "G-29QVXHR841"
+        };
+        
+        const appId = 'ziarah-nu-pejogol-2026';
+        
+        let app, auth, db;
+        try {
+            app = initializeApp(firebaseConfig);
+            auth = getAuth(app);
+            db = getFirestore(app);
+        } catch (error) {
+            console.error("Gagal inisialisasi Firebase", error);
+            alert(`Sistem gagal membaca konfigurasi Firebase. Pesan Sistem: ${error.message}`);
+        }
+
+        const NULogoOfficial = ({ className }) => (
+          <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/51/Nahdlatul_Ulama_Logo.svg/960px-Nahdlatul_Ulama_Logo.svg.png" alt="Logo NU" className={className} style={{ objectFit: 'contain' }} />
+        );
+
+        const App = () => {
+          const [user, setUser] = useState(null);
+          const [activeTab, setActiveTab] = useState('denah');
+          const [registrations, setRegistrations] = useState([]);
+          const [kasTransactions, setKasTransactions] = useState([]);
+          const [searchTerm, setSearchTerm] = useState('');
+          const [editingId, setEditingId] = useState(null);
+          const [viewBus, setViewBus] = useState('Bus 1');
+          const [isDownloading, setIsDownloading] = useState(false);
+          const [deleteTarget, setDeleteTarget] = useState(null); 
+          
+          const initialForm = { nama: '', alamat: 'PEJOGOL', bus: 'Bus 1', kursi: '', statusPembayaran: 'Lunas', jumlahBayar: 0, riwayatAngsuran: [] };
+          const [formData, setFormData] = useState(initialForm);
+          const [kasForm, setKasForm] = useState({ uraian: '', tipe: 'Masuk', nominal: 0 });
+          const [inputAngsuran, setInputAngsuran] = useState(0);
+
+          useEffect(() => {
+            if(!auth) return;
+            const initAuth = async () => {
+              try { 
+                  await signInAnonymously(auth); 
+              } 
+              catch (err) { 
+                  console.error("Auth error:", err); 
+                  alert(`Autentikasi Anonim Gagal: ${err.message}\nPastikan Anda tidak membuka ini via file:///`);
+              }
+            };
+            initAuth();
+            const unsubscribe = onAuthStateChanged(auth, (u) => setUser(u));
+            return () => unsubscribe();
+          }, []);
+
+          useEffect(() => {
+            if (!user || !db) return;
+            const regRef = collection(db, 'artifacts', appId, 'public', 'data', 'registrations');
+            const unsubReg = onSnapshot(regRef, (snapshot) => {
+              setRegistrations(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            }, (err) => {
+                console.error("Error baca data jamaah:", err);
+                alert(`Gagal mengambil data jamaah. Cek Firestore Rules. Pesan: ${err.message}`);
+            });
+
+            const kasRef = collection(db, 'artifacts', appId, 'public', 'data', 'kas');
+            const unsubKas = onSnapshot(kasRef, (snapshot) => {
+              setKasTransactions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            }, (err) => console.error("Error baca data kas:", err));
+
+            return () => { unsubReg(); unsubKas(); };
+          }, [user]);
+
+          // Perhitungan Statistik
+          const totalUangPendaftaran = registrations.reduce((acc, curr) => acc + (Number(curr.jumlahBayar) || 0), 0);
+          const totalKasMasuk = kasTransactions.filter(t => t.tipe === 'Masuk').reduce((acc, curr) => acc + (Number(curr.nominal) || 0), 0);
+          const totalKasKeluar = kasTransactions.filter(t => t.tipe === 'Keluar').reduce((acc, curr) => acc + (Number(curr.nominal) || 0), 0);
+          const saldoAkhir = (totalUangPendaftaran + totalKasMasuk) - totalKasKeluar;
+
+          const getCombinedLedger = () => {
+            const registrationEntries = registrations.map(r => ({
+              id: r.id, tanggal: r.updatedAt || new Date().toISOString(), uraian: `PENDAFTARAN: ${r.nama} (${r.bus})`,
+              masuk: Number(r.jumlahBayar) || 0, keluar: 0, tipe: 'Masuk', isSystem: true
+            }));
+            const manualKasEntries = kasTransactions.map(k => ({
+              id: k.id, tanggal: k.createdAt || new Date().toISOString(), uraian: k.uraian,
+              masuk: k.tipe === 'Masuk' ? Number(k.nominal) : 0, keluar: k.tipe === 'Keluar' ? Number(k.nominal) : 0,
+              tipe: k.tipe, isSystem: false
+            }));
+            const sortedEntries = [...registrationEntries, ...manualKasEntries].sort((a, b) => new Date(a.tanggal) - new Date(b.tanggal));
+            let runningBalance = 0;
+            return sortedEntries.map(entry => { runningBalance += (entry.masuk - entry.keluar); return { ...entry, saldo: runningBalance }; });
+          };
+          const ledgerData = getCombinedLedger();
+
+          const exportToCSV = () => {
+            const sortedData = [...registrations].sort((a, b) => a.bus.localeCompare(b.bus) || Number(a.kursi) - Number(b.kursi));
+            const headers = ["No Kursi", "Bus", "Nama Jamaah", "Alamat", "Status Bayar", "Jumlah Bayar", "Tanggal Daftar"];
+            const rows = sortedData.map(reg => [ reg.kursi, reg.bus, reg.nama, reg.alamat, reg.statusPembayaran, reg.jumlahBayar, new Date(reg.updatedAt || Date.now()).toLocaleDateString('id-ID') ]);
+            const csvContent = [headers.join(","), ...rows.map(row => row.join(","))].join("\n");
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", `Data-Jamaah-Ziarah-NU-2026.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+          };
+
+          const handleSubmit = async (e) => {
+            e.preventDefault();
+            
+            if (!formData.kursi) {
+                alert("⚠️ PERHATIAN: Anda belum memilih kursi! Silakan ketuk gambar kursi pada denah di bawah formulir.");
+                return;
+            }
+            if (!formData.nama) {
+                alert("⚠️ PERHATIAN: Nama lengkap wajib diisi!");
+                return;
+            }
+            if (!user || !db) {
+                alert("⚠️ KONEKSI GAGAL: Aplikasi belum terhubung ke database. Cek apakah Anda sudah membuka aplikasi menggunakan Live Server / Hosting HTTPS.");
+                return;
+            }
+
+            const docId = editingId || Date.now().toString();
+            let updatedPayload = { ...formData };
+            if (formData.statusPembayaran === 'Mengangsur' && inputAngsuran > 0) {
+              const newHistory = { tanggal: new Date().toISOString(), nominal: Number(inputAngsuran) };
+              updatedPayload.riwayatAngsuran = [...(formData.riwayatAngsuran || []), newHistory];
+              updatedPayload.jumlahBayar = (Number(formData.jumlahBayar) || 0) + Number(inputAngsuran);
+            }
+
+            try {
+              await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'registrations', docId), { 
+                ...updatedPayload, updatedAt: new Date().toISOString() 
+              });
+              alert("✅ Data jamaah berhasil disimpan!");
+              setEditingId(null); setFormData(initialForm); setInputAngsuran(0); setActiveTab('admin');
+            } catch (err) { 
+              console.error(err); 
+              alert(`❌ GAGAL MENYIMPAN! Pesan sistem: ${err.message}`);
+            }
+          };
+
+          const handleAddKas = async () => {
+            if (!kasForm.uraian || !kasForm.nominal) {
+                alert("⚠️ PERHATIAN: Harap isi uraian dan nominal transaksi!");
+                return;
+            }
+            if (!user || !db) {
+                alert("⚠️ KONEKSI GAGAL: Belum terkoneksi ke database Firebase.");
+                return;
+            }
+            
+            try {
+              await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'kas'), {
+                ...kasForm, createdAt: new Date().toISOString()
+              });
+              alert("✅ Transaksi kas berhasil dicatat!");
+              setKasForm({ uraian: '', tipe: 'Masuk', nominal: 0 });
+            } catch (err) { 
+              console.error(err); 
+              alert(`❌ GAGAL MENYIMPAN KAS! Pesan sistem: ${err.message}`);
+            }
+          };
+
+          const handleExecuteDelete = async () => {
+            if (!user || !db || !deleteTarget) return;
+            try {
+              const collectionName = deleteTarget.type === 'jamaah' ? 'registrations' : 'kas';
+              await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', collectionName, deleteTarget.id));
+              alert("✅ Data berhasil dihapus.");
+              setDeleteTarget(null);
+            } catch (err) { 
+              console.error(err); 
+              alert(`❌ Gagal menghapus data! Pesan sistem: ${err.message}`);
+              setDeleteTarget(null); 
+            }
+          };
+
+          const busRef = useRef(null);
+          const handleDownloadDenah = async () => {
+            if (isDownloading) return;
+            setIsDownloading(true);
+            try {
+              const element = busRef.current;
+              const canvas = await window.html2canvas(element, { 
+                backgroundColor: '#ffffff', scale: 2, useCORS: true, logging: false,
+                onclone: (clonedDoc) => {
+                  const area = clonedDoc.querySelector('#bus-capture-area');
+                  if (area) { area.style.padding = '40px'; area.style.display = 'inline-block'; }
+                }
+              });
+              const image = canvas.toDataURL('image/png', 1.0);
+              const link = document.createElement('a');
+              link.href = image; link.download = `Denah-${viewBus}.png`;
+              document.body.appendChild(link); link.click(); document.body.removeChild(link);
+            } catch (err) { console.error(err); alert("Gagal mengunduh gambar denah."); } finally { setIsDownloading(false); }
+          };
+
+          const renderBusLayout = (targetBus, isInteractive = true) => {
+            const rows = []; let seatCounter = 1;
+
+            const SeatBox = ({ num }) => {
+              const occupiedBy = registrations.find(r => r.bus === targetBus && r.kursi === num.toString());
+              const isSelected = isInteractive && formData.kursi === num.toString();
+              const isBeingEdited = occupiedBy && occupiedBy.id === editingId;
+
+              return (
+                <div onClick={() => { if (!isInteractive) return; if (occupiedBy && !isBeingEdited) { alert("Nomor kursi ini sudah diisi!"); return; } setFormData(prev => ({ ...prev, kursi: num.toString() })); }}
+                  className={`relative rounded-xl transition-all flex flex-col items-center justify-start w-16 h-16 sm:w-20 sm:h-20 border-2 ${occupiedBy && !isBeingEdited ? 'bg-red-50 border-red-200 cursor-not-allowed' : isSelected ? 'bg-green-700 border-green-900 text-white z-10' : 'bg-white border-slate-100 text-slate-300 cursor-pointer hover:border-green-300 shadow-sm'}`}
+                >
+                  <span className={`text-[10px] font-black mt-1 ${isSelected ? 'text-green-200' : 'text-slate-400'}`}>{num}</span>
+                  <div className="flex-1 flex flex-col items-center justify-center w-full px-1 overflow-hidden">
+                    {occupiedBy && !isBeingEdited ? (
+                      <div className="w-full text-center"><p className="text-[8px] leading-tight font-black text-red-700 uppercase break-words">{occupiedBy.nama}</p><p className="text-[6px] font-bold text-red-400 uppercase tracking-tighter">{occupiedBy.alamat.substring(0, 8)}</p></div>
+                    ) : ( <Armchair size={14} className="opacity-20 mb-1" /> )}
+                  </div>
+                </div>
+              );
+            };
+
+            for (let row = 0; row < 11; row++) {
+              const rowSeats = [];
+              for (let col = 0; col < 4; col++) {
+                const currentNum = seatCounter++;
+                rowSeats.push(<SeatBox key={currentNum} num={currentNum} />);
+                if (col === 1) rowSeats.push(<div key={`aisle-${row}`} className="w-6 sm:w-10"></div>);
+              }
+              rows.push(<div key={`row-${row}`} className="flex gap-1.5 mb-1.5">{rowSeats}</div>);
+            }
+            const backSeats = [];
+            for (let i = 45; i <= 50; i++) { backSeats.push(<SeatBox key={i} num={i} />); }
+
+            return (
+              <div id={!isInteractive ? "bus-capture-area" : undefined} ref={isInteractive ? null : busRef} className={`inline-flex flex-col items-center bg-white ${isInteractive ? 'rounded-[40px] p-6 border border-slate-200 shadow-xl' : 'p-10'}`}>
+                {!isInteractive && (
+                  <div className="w-full flex flex-col items-center mb-10 text-center"><NULogoOfficial className="w-16 h-16 mb-3" /><h3 className="text-lg font-black text-green-900 tracking-tighter uppercase">DENAH KURSI {targetBus}</h3><p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] mb-4">Ziarah NU Pejogol 2026</p><div className="w-full h-[2px] bg-green-800/20 rounded-full"></div></div>
+                )}
+                <div className="w-full h-16 mb-8 bg-slate-50 rounded-2xl flex items-center justify-between px-6 border-2 border-slate-100 shadow-inner">
+                    <div className="w-10 h-10 bg-slate-200 rounded-full flex items-center justify-center"><div className="w-6 h-6 border-4 border-white rounded-full"></div></div>
+                    <div className="px-4 py-1.5 bg-slate-200 rounded-full font-black text-slate-500 text-[9px] uppercase tracking-widest">AREA SUPIR</div>
+                </div>
+                {rows}
+                <div className="flex mt-4 pt-4 border-t-2 border-slate-50 gap-1.5">{backSeats}</div>
+                {!isInteractive && (
+                  <div className="w-full mt-12 pt-6 flex justify-between items-end border-t border-slate-100">
+                     <div><p className="text-[8px] font-black text-green-800 uppercase">Panitia Ziarah NU Pejogol</p><p className="text-[7px] font-bold text-slate-400">Kec. Cilongok - Banyumas</p></div><p className="text-[7px] font-bold text-slate-300 uppercase italic">Generated by Digital-Ziarah-System</p>
+                  </div>
+                )}
+              </div>
+            );
+          };
+
+          return (
+            <div className="min-h-screen bg-slate-50 pb-24 font-['Plus_Jakarta_Sans']">
+              {deleteTarget && (
+                <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
+                  <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setDeleteTarget(null)}></div>
+                  <div className="relative bg-white w-full max-w-xs rounded-[32px] shadow-2xl overflow-hidden p-6 text-center">
+                    <AlertTriangle className="text-red-600 mx-auto mb-4" size={40} />
+                    <h3 className="text-sm font-black text-slate-800 uppercase mb-2">Hapus Data?</h3>
+                    <p className="text-[10px] text-slate-500 font-bold mb-6 italic">"{deleteTarget.nama}"</p>
+                    <div className="flex gap-2">
+                      <button onClick={() => setDeleteTarget(null)} className="flex-1 py-3 bg-slate-100 text-slate-500 text-[10px] font-black rounded-2xl uppercase">Batal</button>
+                      <button onClick={handleExecuteDelete} className="flex-1 py-3 bg-red-600 text-white text-[10px] font-black rounded-2xl uppercase shadow-lg">Hapus</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <header className="bg-green-900 text-white p-4 sticky top-0 z-50 flex justify-between items-center shadow-lg">
+                <div className="flex items-center gap-3"><NULogoOfficial className="w-10 h-10 bg-white p-1 rounded-xl" /><div><h1 className="text-xs font-black tracking-tighter uppercase">ZIARAH NU 2026</h1><p className="text-[8px] font-bold text-green-400 tracking-widest uppercase">PEJOGOL - BANYUMAS</p></div></div>
+                <div className="text-right"><p className="text-[8px] font-black text-green-300 uppercase opacity-70">Saldo Akhir</p><p className="text-sm font-black italic">Rp {saldoAkhir.toLocaleString()}</p></div>
+              </header>
+
+              <nav className="fixed bottom-4 left-4 right-4 bg-white/90 backdrop-blur-md border border-slate-200 z-[100] p-1.5 flex justify-around items-center shadow-2xl rounded-[32px]">
+                {[ {id: 'denah', icon: Layout, label: 'Denah'}, {id: 'registration', icon: PlusCircle, label: 'Input'}, {id: 'admin', icon: Users, label: 'Jamaah'}, {id: 'kas', icon: Wallet2, label: 'Buku Kas'} ].map(tab => (
+                  <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex flex-col items-center gap-1 py-2 px-4 rounded-2xl transition-all ${activeTab === tab.id ? 'bg-green-100 text-green-800' : 'text-slate-400'}`}><tab.icon size={20} /><span className="text-[8px] font-black uppercase">{tab.label}</span></button>
+                ))}
+              </nav>
+
+              <main className="max-w-4xl mx-auto p-4">
+                {activeTab === 'denah' && (
+                  <div className="space-y-4">
+                     <div className="bg-white p-5 rounded-[40px] border border-slate-200 shadow-sm">
+                        <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6"><h2 className="text-[11px] font-black text-slate-800 uppercase flex items-center gap-2"><Camera size={16} className="text-green-600" /> Layout Kursi</h2><div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200 w-full sm:w-auto">{['Bus 1', 'Bus 2', 'Bus 3'].map(b => (<button key={b} onClick={() => setViewBus(b)} className={`px-4 py-2 rounded-xl text-[9px] font-black transition-all ${viewBus === b ? 'bg-white text-green-700 shadow-sm border border-slate-200' : 'text-slate-400'}`}>{b}</button>))}</div></div>
+                        <div className="w-full flex justify-center overflow-x-auto py-4 bg-slate-50 rounded-[32px] border-2 border-dashed border-slate-200">{renderBusLayout(viewBus, false)}</div>
+                        <div className="mt-6"><button onClick={handleDownloadDenah} disabled={isDownloading} className="w-full bg-green-800 disabled:bg-slate-400 text-white py-4 rounded-2xl text-[10px] font-black flex items-center justify-center gap-3 uppercase tracking-widest shadow-xl active:scale-95 transition-all">{isDownloading ? 'MENYIAPKAN GAMBAR...' : <><Download size={18}/> Simpan Denah {viewBus}</>}</button></div>
+                     </div>
+                  </div>
+                )}
+
+                {activeTab === 'registration' && (
+                  <div className="max-w-2xl mx-auto space-y-6">
+                    <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
+                        <div className="p-5 bg-slate-50 border-b font-black text-[11px] uppercase text-slate-600 flex justify-between"><span>Form Pendaftaran</span>{editingId && <span className="text-blue-600">Mode Edit</span>}</div>
+                        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                            <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-2">Nama Lengkap</label><input type="text" placeholder="CONTOH: H. AHMAD..." value={formData.nama} onChange={e => setFormData({...formData, nama: e.target.value.toUpperCase()})} className="w-full p-4 rounded-2xl bg-slate-50 border-2 border-slate-50 font-bold focus:border-green-500 focus:bg-white outline-none transition-all" /></div>
+                            <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-2">Alamat (RT/RW)</label><input type="text" placeholder="CONTOH: RT 01 RW 02..." value={formData.alamat} onChange={e => setFormData({...formData, alamat: e.target.value.toUpperCase()})} className="w-full p-4 rounded-2xl bg-slate-50 border-2 border-slate-50 font-bold focus:border-green-500 focus:bg-white outline-none transition-all" /></div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-2">Pilih Bus</label><select value={formData.bus} onChange={e => setFormData({...formData, bus: e.target.value})} className="w-full p-4 rounded-2xl bg-slate-50 border-2 border-slate-50 font-black text-xs outline-none"><option>Bus 1</option><option>Bus 2</option><option>Bus 3</option></select></div>
+                                <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-2 text-center block">Nomor Kursi</label><input type="text" value={formData.kursi} readOnly className="w-full p-4 rounded-2xl bg-green-50 border-2 border-green-200 font-black text-center text-green-800 text-lg shadow-inner cursor-not-allowed" placeholder="Pilih di Bawah" /></div>
+                            </div>
+                            <div className="flex gap-2 p-1 bg-slate-100 rounded-2xl">{['Lunas', 'Mengangsur'].map(s => (<button key={s} type="button" onClick={() => setFormData({...formData, statusPembayaran: s})} className={`flex-1 py-3 rounded-xl text-[9px] font-black transition-all ${formData.statusPembayaran === s ? 'bg-white text-green-800 shadow-sm' : 'text-slate-400'}`}>{s.toUpperCase()}</button>))}</div>
+                            {formData.statusPembayaran === 'Mengangsur' && (<div className="p-5 bg-amber-50 rounded-2xl border border-amber-200 text-center"><p className="text-[8px] font-black text-amber-700 uppercase mb-2">Input Nominal Bayar Baru</p><input type="number" value={inputAngsuran} onChange={e => setInputAngsuran(e.target.value)} className="w-full p-3 rounded-xl border-2 border-amber-200 text-center font-black text-2xl text-amber-900 bg-white shadow-inner" /></div>)}
+                            <button type="submit" className="w-full bg-green-900 text-white font-black py-5 rounded-[24px] shadow-xl uppercase text-[11px] tracking-widest active:scale-95 transition-all mt-4">Simpan Data Jamaah</button>
+                        </form>
+                    </div>
+                    <div className="text-center pb-20">
+                        <p className="text-[11px] font-black text-green-600 uppercase mb-4 tracking-tighter bg-green-50 p-3 rounded-2xl inline-block shadow-sm">↓ KETUK NOMOR KURSI DI BAWAH UNTUK MEMILIH ↓</p>
+                        <div className="inline-block">{renderBusLayout(formData.bus, true)}</div>
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === 'admin' && (
+                     <div className="space-y-4">
+                        <div className="bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm">
+                            <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6"><div className="flex items-center gap-3 bg-slate-50 px-4 py-2 rounded-2xl flex-1 w-full border border-slate-100"><Search size={16} className="text-slate-400" /><input type="text" placeholder="CARI NAMA ATAU NO KURSI..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="bg-transparent font-bold text-xs outline-none w-full" /></div><button onClick={exportToCSV} className="flex items-center gap-2 bg-blue-50 text-blue-700 px-5 py-3 rounded-2xl text-[10px] font-black uppercase hover:bg-blue-100 transition-all border border-blue-100"><FileSpreadsheet size={16} /> Export ke Spreadsheet</button></div>
+                            <div className="overflow-x-auto -mx-6">
+                                <table className="w-full text-left text-[10px]">
+                                    <thead className="bg-slate-50 text-slate-400 font-black uppercase border-y border-slate-100"><tr><th className="px-6 py-4">Jamaah</th><th className="px-6 py-4 text-right">Pembayaran</th><th className="px-6 py-4 text-center">Aksi</th></tr></thead>
+                                    <tbody className="divide-y divide-slate-50">
+                                        {registrations.filter(r => (r.nama || '').includes(searchTerm.toUpperCase()) || (r.kursi || '').includes(searchTerm)).sort((a,b) => a.bus.localeCompare(b.bus) || Number(a.kursi) - Number(b.kursi)).map(reg => (
+                                            <tr key={reg.id} className="hover:bg-slate-50/50"><td className="px-6 py-4"><div className="flex items-center gap-3"><div className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center font-black text-green-800 text-[10px]">{reg.kursi}</div><div><p className="font-black text-slate-800 uppercase">{reg.nama}</p><p className="text-[7px] font-bold text-slate-400">{reg.bus} • {reg.alamat}</p></div></div></td><td className="px-6 py-4 text-right"><p className={`text-[8px] font-black ${reg.statusPembayaran === 'Lunas' ? 'text-green-600' : 'text-amber-600'}`}>{reg.statusPembayaran.toUpperCase()}</p><p className="font-black text-slate-700">Rp {Number(reg.jumlahBayar || 0).toLocaleString()}</p></td><td className="px-6 py-4"><div className="flex gap-2 justify-center"><button onClick={() => {setFormData(reg); setEditingId(reg.id); setActiveTab('registration');}} className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Edit2 size={12}/></button><button onClick={() => setDeleteTarget({id: reg.id, nama: reg.nama, type: 'jamaah'})} className="p-2 bg-red-50 text-red-600 rounded-lg"><Trash2 size={12}/></button></div></td></tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                     </div>
+                )}
+                
+                {activeTab === 'kas' && (
+                    <div className="space-y-6">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div className="bg-green-800 text-white p-6 rounded-[32px] shadow-lg relative overflow-hidden"><div className="absolute top-0 right-0 p-4 opacity-10"><ArrowUpRight size={48} /></div><p className="text-[9px] font-black uppercase text-green-200">Total Masuk</p><p className="text-xl font-black italic">Rp {(totalUangPendaftaran + totalKasMasuk).toLocaleString()}</p></div>
+                            <div className="bg-red-800 text-white p-6 rounded-[32px] shadow-lg relative overflow-hidden"><div className="absolute top-0 right-0 p-4 opacity-10"><ArrowDownLeft size={48} /></div><p className="text-[9px] font-black uppercase text-red-200">Total Keluar</p><p className="text-xl font-black italic">Rp {totalKasKeluar.toLocaleString()}</p></div>
+                            <div className="bg-slate-900 text-white p-6 rounded-[32px] shadow-xl relative overflow-hidden"><div className="absolute top-0 right-0 p-4 opacity-10"><Wallet2 size={48} /></div><p className="text-[9px] font-black uppercase text-slate-400">Saldo Akhir</p><p className="text-xl font-black italic">Rp {saldoAkhir.toLocaleString()}</p></div>
+                        </div>
+                        <div className="bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm space-y-4">
+                            <h3 className="text-[10px] font-black text-slate-800 uppercase tracking-widest border-b pb-3 flex items-center gap-2"><PlusCircle size={14} className="text-green-600" /> Catat Transaksi Baru</h3>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><input type="text" placeholder="URAIAN (MISAL: BELI AIR MINERAL)..." value={kasForm.uraian} onChange={e => setKasForm({...kasForm, uraian: e.target.value.toUpperCase()})} className="p-4 rounded-2xl bg-slate-50 border-2 border-slate-50 font-bold text-xs" /><div className="flex gap-2 p-1 bg-slate-100 rounded-2xl">{['Masuk', 'Keluar'].map(t => (<button key={t} onClick={() => setKasForm({...kasForm, tipe: t})} className={`flex-1 py-3 rounded-xl text-[9px] font-black transition-all ${kasForm.tipe === t ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400'}`}>{t.toUpperCase()}</button>))}</div></div>
+                            <div className="flex flex-col sm:flex-row gap-4 items-center"><input type="number" placeholder="NOMINAL RP..." value={kasForm.nominal} onChange={e => setKasForm({...kasForm, nominal: e.target.value})} className="flex-1 p-4 rounded-2xl bg-slate-50 border-2 border-slate-50 font-black text-xl text-center" /><button onClick={handleAddKas} className="w-full sm:w-auto px-8 bg-green-800 text-white py-4 rounded-2xl font-black text-[10px] uppercase shadow-lg active:scale-95 transition-all">Simpan</button></div>
+                        </div>
+                        <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
+                            <div className="p-5 bg-slate-50 border-b flex justify-between items-center"><h3 className="text-[10px] font-black text-slate-600 uppercase tracking-widest flex items-center gap-2"><Calendar size={14} /> Buku Kas Umum Ziarah 2026</h3></div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-[10px] text-left border-collapse">
+                                    <thead className="bg-slate-100 text-slate-500 font-black uppercase"><tr><th className="px-4 py-3 border-b text-center">Tgl</th><th className="px-4 py-3 border-b">Uraian Transaksi</th><th className="px-4 py-3 border-b text-right text-green-700">Masuk (D)</th><th className="px-4 py-3 border-b text-right text-red-700">Keluar (K)</th><th className="px-4 py-3 border-b text-right">Saldo</th><th className="px-4 py-3 border-b text-center">Aksi</th></tr></thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {ledgerData.reverse().map((entry, idx) => (
+                                            <tr key={entry.id} className={`hover:bg-slate-50 ${entry.tipe === 'Masuk' ? 'bg-green-50/20' : 'bg-red-50/20'}`}><td className="px-4 py-3 whitespace-nowrap text-slate-400 font-medium">{new Date(entry.tanggal).toLocaleDateString('id-ID', {day: '2-digit', month: '2-digit'})}</td><td className="px-4 py-3"><p className="font-black text-slate-700 uppercase leading-tight">{entry.uraian}</p>{entry.isSystem && <span className="text-[7px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-black uppercase">Otomatis</span>}</td><td className="px-4 py-3 text-right font-bold text-green-700">{entry.masuk > 0 ? `Rp ${entry.masuk.toLocaleString()}` : '-'}</td><td className="px-4 py-3 text-right font-bold text-red-700">{entry.keluar > 0 ? `Rp ${entry.keluar.toLocaleString()}` : '-'}</td><td className="px-4 py-3 text-right font-black text-slate-900 bg-slate-50/50">Rp {entry.saldo.toLocaleString()}</td><td className="px-4 py-3 text-center">{!entry.isSystem && (<button onClick={() => setDeleteTarget({id: entry.id, nama: entry.uraian, type: 'kas'})} className="p-1.5 text-red-400 hover:text-red-700 transition-colors"><Trash2 size={12} /></button>)}</td></tr>
+                                        ))}
+                                        {ledgerData.length === 0 && (<tr><td colSpan="6" className="px-4 py-10 text-center text-slate-400 font-bold italic uppercase">Belum ada transaksi</td></tr>)}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                )}
+              </main>
+
+              <style>{`
+                @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=swap');
+                ::-webkit-scrollbar { width: 6px; height: 6px; }
+                ::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+              `}</style>
+            </div>
+          );
+        };
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
