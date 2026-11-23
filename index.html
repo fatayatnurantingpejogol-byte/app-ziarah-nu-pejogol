@@ -148,10 +148,32 @@
           };
           const ledgerData = getCombinedLedger();
 
+          // Urutan master peserta untuk nomor urut konsisten
+          const sortedRegistrations = [...registrations].sort(
+            (a, b) => a.bus.localeCompare(b.bus) || Number(a.kursi) - Number(b.kursi)
+          );
+
+          const filteredRegistrations = sortedRegistrations
+            .map((reg, index) => ({ ...reg, noUrut: index + 1 }))
+            .filter(r =>
+              (r.nama || '').includes(searchTerm.toUpperCase()) ||
+              (r.kursi || '').includes(searchTerm) ||
+              (r.bus || '').toUpperCase().includes(searchTerm.toUpperCase()) ||
+              String(r.noUrut) === searchTerm.trim()
+            );
+
           const exportToCSV = () => {
-            const sortedData = [...registrations].sort((a, b) => a.bus.localeCompare(b.bus) || Number(a.kursi) - Number(b.kursi));
-            const headers = ["No Kursi", "Bus", "Nama Jamaah", "Alamat", "Status Bayar", "Jumlah Bayar", "Tanggal Daftar"];
-            const rows = sortedData.map(reg => [ reg.kursi, reg.bus, reg.nama, reg.alamat, reg.statusPembayaran, reg.jumlahBayar, new Date(reg.updatedAt || Date.now()).toLocaleDateString('id-ID') ]);
+            const headers = ["No. Urut", "No Kursi", "Armada", "Nama Jamaah", "Alamat", "Status Bayar", "Jumlah Bayar", "Tanggal Daftar"];
+            const rows = sortedRegistrations.map((reg, idx) => [
+              idx + 1,
+              reg.kursi,
+              reg.bus,
+              reg.nama,
+              reg.alamat,
+              reg.statusPembayaran,
+              reg.jumlahBayar,
+              new Date(reg.updatedAt || Date.now()).toLocaleDateString('id-ID')
+            ]);
             const csvContent = [headers.join(","), ...rows.map(row => row.join(","))].join("\n");
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
@@ -257,8 +279,6 @@
           };
 
           const renderBusLayout = (targetBus, isInteractive = true) => {
-            const rows = []; let seatCounter = 1;
-
             const SeatBox = ({ num }) => {
               const occupiedBy = registrations.find(r => r.bus === targetBus && r.kursi === num.toString());
               const isSelected = isInteractive && formData.kursi === num.toString();
@@ -271,16 +291,79 @@
                   <span className={`text-[10px] font-black mt-1 ${isSelected ? 'text-green-200' : 'text-slate-400'}`}>{num}</span>
                   <div className="flex-1 flex flex-col items-center justify-center w-full px-1 overflow-hidden">
                     {occupiedBy && !isBeingEdited ? (
-                      <div className="w-full text-center">
-                        <p className="text-[8px] leading-tight font-black text-red-700 uppercase break-words">{occupiedBy.nama}</p>
-                        <p className="text-[6px] leading-tight font-bold text-red-500 uppercase break-words">{occupiedBy.alamat}</p>
-                      </div>
+                      <div className="w-full text-center"><p className="text-[8px] leading-tight font-black text-red-700 uppercase break-words">{occupiedBy.nama}</p><p className="text-[6px] font-bold text-red-400 uppercase tracking-tighter">{occupiedBy.alamat.substring(0, 8)}</p></div>
                     ) : ( <Armchair size={14} className="opacity-20 mb-1" /> )}
                   </div>
                 </div>
               );
             };
 
+            // Tata Letak Khusus Armada "Mobil" (11 Jok sesuai denah gambar)
+            if (targetBus === 'Mobil') {
+              return (
+                <div id={!isInteractive ? "bus-capture-area" : undefined} ref={isInteractive ? null : busRef} className={`inline-flex flex-col items-center bg-white ${isInteractive ? 'rounded-[40px] p-6 border border-slate-200 shadow-xl' : 'p-10'}`}>
+                  {!isInteractive && (
+                    <div className="w-full flex flex-col items-center mb-8 text-center">
+                      <NULogoOfficial className="w-16 h-16 mb-3" />
+                      <h3 className="text-lg font-black text-green-900 tracking-tighter uppercase">DENAH KURSI {targetBus} (11 JOK)</h3>
+                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] mb-4">Ziarah NU Pejogol 2026</p>
+                      <div className="w-full h-[2px] bg-green-800/20 rounded-full"></div>
+                    </div>
+                  )}
+
+                  {/* Baris 1 (Depan): Kursi 1 (Kiri) + Ruang Kosong + Supir (Kanan) */}
+                  <div className="flex gap-1.5 mb-2 items-center">
+                    <SeatBox num={1} />
+                    <div className="w-6 sm:w-10"></div>
+                    <div className="w-16 sm:w-20"></div>
+                    <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl bg-slate-100 border-2 border-slate-200 flex flex-col items-center justify-center shadow-inner">
+                      <div className="w-7 h-7 bg-slate-300 rounded-full flex items-center justify-center mb-1">
+                        <div className="w-4 h-4 border-2 border-white rounded-full"></div>
+                      </div>
+                      <span className="text-[8px] font-black text-slate-500 uppercase tracking-wider">SUPIR</span>
+                    </div>
+                  </div>
+
+                  {/* Baris 2: Akses Pintu Kiri (Kosong) + Kursi 4, 3, 2 */}
+                  <div className="flex gap-1.5 mb-2 items-center">
+                    <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl border-2 border-dashed border-slate-200 flex items-center justify-center">
+                      <span className="text-[8px] font-black text-slate-300 uppercase">PINTU</span>
+                    </div>
+                    <div className="w-6 sm:w-10"></div>
+                    <SeatBox num={4} />
+                    <SeatBox num={3} />
+                    <SeatBox num={2} />
+                  </div>
+
+                  {/* Baris 3: Kursi 7 (Kiri) + Lorong + Kursi 6, 5 (Kanan) */}
+                  <div className="flex gap-1.5 mb-2 items-center">
+                    <SeatBox num={7} />
+                    <div className="w-6 sm:w-10"></div>
+                    <div className="w-16 sm:w-20"></div>
+                    <SeatBox num={6} />
+                    <SeatBox num={5} />
+                  </div>
+
+                  {/* Baris 4 (Belakang): Kursi 11, 10, 9, 8 */}
+                  <div className="flex gap-1.5 mt-2 pt-3 border-t-2 border-slate-100 items-center">
+                    <SeatBox num={11} />
+                    <div className="w-6 sm:w-10"></div>
+                    <SeatBox num={10} />
+                    <SeatBox num={9} />
+                    <SeatBox num={8} />
+                  </div>
+
+                  {!isInteractive && (
+                    <div className="w-full mt-10 pt-6 flex justify-between items-end border-t border-slate-100">
+                       <div><p className="text-[8px] font-black text-green-800 uppercase">Panitia Ziarah NU Pejogol</p><p className="text-[7px] font-bold text-slate-400">Kec. Cilongok - Banyumas</p></div><p className="text-[7px] font-bold text-slate-300 uppercase italic">Generated by Digital-Ziarah-System</p>
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            // Tata Letak Default Bus 1, Bus 2, Bus 3 (50 Kursi)
+            const rows = []; let seatCounter = 1;
             for (let row = 0; row < 11; row++) {
               const rowSeats = [];
               for (let col = 0; col < 4; col++) {
@@ -345,7 +428,14 @@
                 {activeTab === 'denah' && (
                   <div className="space-y-4">
                      <div className="bg-white p-5 rounded-[40px] border border-slate-200 shadow-sm">
-                        <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6"><h2 className="text-[11px] font-black text-slate-800 uppercase flex items-center gap-2"><Camera size={16} className="text-green-600" /> Layout Kursi</h2><div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200 w-full sm:w-auto">{['Bus 1', 'Bus 2', 'Bus 3'].map(b => (<button key={b} onClick={() => setViewBus(b)} className={`px-4 py-2 rounded-xl text-[9px] font-black transition-all ${viewBus === b ? 'bg-white text-green-700 shadow-sm border border-slate-200' : 'text-slate-400'}`}>{b}</button>))}</div></div>
+                        <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
+                          <h2 className="text-[11px] font-black text-slate-800 uppercase flex items-center gap-2"><Camera size={16} className="text-green-600" /> Layout Kursi</h2>
+                          <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200 w-full sm:w-auto overflow-x-auto">
+                            {['Bus 1', 'Bus 2', 'Bus 3', 'Mobil'].map(b => (
+                              <button key={b} onClick={() => setViewBus(b)} className={`flex-1 sm:flex-none px-4 py-2 rounded-xl text-[9px] font-black transition-all whitespace-nowrap ${viewBus === b ? 'bg-white text-green-700 shadow-sm border border-slate-200' : 'text-slate-400'}`}>{b}</button>
+                            ))}
+                          </div>
+                        </div>
                         <div className="w-full flex justify-center overflow-x-auto py-4 bg-slate-50 rounded-[32px] border-2 border-dashed border-slate-200">{renderBusLayout(viewBus, false)}</div>
                         <div className="mt-6"><button onClick={handleDownloadDenah} disabled={isDownloading} className="w-full bg-green-800 disabled:bg-slate-400 text-white py-4 rounded-2xl text-[10px] font-black flex items-center justify-center gap-3 uppercase tracking-widest shadow-xl active:scale-95 transition-all">{isDownloading ? 'MENYIAPKAN GAMBAR...' : <><Download size={18}/> Simpan Denah {viewBus}</>}</button></div>
                      </div>
@@ -360,7 +450,15 @@
                             <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-2">Nama Lengkap</label><input type="text" placeholder="CONTOH: H. AHMAD..." value={formData.nama} onChange={e => setFormData({...formData, nama: e.target.value.toUpperCase()})} className="w-full p-4 rounded-2xl bg-slate-50 border-2 border-slate-50 font-bold focus:border-green-500 focus:bg-white outline-none transition-all" /></div>
                             <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-2">Alamat (RT/RW)</label><input type="text" placeholder="CONTOH: RT 01 RW 02..." value={formData.alamat} onChange={e => setFormData({...formData, alamat: e.target.value.toUpperCase()})} className="w-full p-4 rounded-2xl bg-slate-50 border-2 border-slate-50 font-bold focus:border-green-500 focus:bg-white outline-none transition-all" /></div>
                             <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-2">Pilih Bus</label><select value={formData.bus} onChange={e => setFormData({...formData, bus: e.target.value})} className="w-full p-4 rounded-2xl bg-slate-50 border-2 border-slate-50 font-black text-xs outline-none"><option>Bus 1</option><option>Bus 2</option><option>Bus 3</option></select></div>
+                                <div className="space-y-1">
+                                  <label className="text-[9px] font-black text-slate-400 uppercase ml-2">Pilih Armada</label>
+                                  <select value={formData.bus} onChange={e => setFormData({...formData, bus: e.target.value, kursi: ''})} className="w-full p-4 rounded-2xl bg-slate-50 border-2 border-slate-50 font-black text-xs outline-none">
+                                    <option value="Bus 1">Bus 1</option>
+                                    <option value="Bus 2">Bus 2</option>
+                                    <option value="Bus 3">Bus 3</option>
+                                    <option value="Mobil">Mobil (11 Jok)</option>
+                                  </select>
+                                </div>
                                 <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-2 text-center block">Nomor Kursi</label><input type="text" value={formData.kursi} readOnly className="w-full p-4 rounded-2xl bg-green-50 border-2 border-green-200 font-black text-center text-green-800 text-lg shadow-inner cursor-not-allowed" placeholder="Pilih di Bawah" /></div>
                             </div>
                             <div className="flex gap-2 p-1 bg-slate-100 rounded-2xl">{['Lunas', 'Mengangsur'].map(s => (<button key={s} type="button" onClick={() => setFormData({...formData, statusPembayaran: s})} className={`flex-1 py-3 rounded-xl text-[9px] font-black transition-all ${formData.statusPembayaran === s ? 'bg-white text-green-800 shadow-sm' : 'text-slate-400'}`}>{s.toUpperCase()}</button>))}</div>
@@ -370,7 +468,7 @@
                     </div>
                     <div className="text-center pb-20">
                         <p className="text-[11px] font-black text-green-600 uppercase mb-4 tracking-tighter bg-green-50 p-3 rounded-2xl inline-block shadow-sm">↓ KETUK NOMOR KURSI DI BAWAH UNTUK MEMILIH ↓</p>
-                        <div className="inline-block">{renderBusLayout(formData.bus, true)}</div>
+                        <div className="w-full overflow-x-auto pb-4"><div className="inline-block">{renderBusLayout(formData.bus, true)}</div></div>
                     </div>
                   </div>
                 )}
@@ -378,45 +476,51 @@
                 {activeTab === 'admin' && (
                      <div className="space-y-4">
                         <div className="bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm">
-                            <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6"><div className="flex items-center gap-3 bg-slate-50 px-4 py-2 rounded-2xl flex-1 w-full border border-slate-100"><Search size={16} className="text-slate-400" /><input type="text" placeholder="CARI NAMA ATAU NO KURSI..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="bg-transparent font-bold text-xs outline-none w-full" /></div><button onClick={exportToCSV} className="flex items-center gap-2 bg-blue-50 text-blue-700 px-5 py-3 rounded-2xl text-[10px] font-black uppercase hover:bg-blue-100 transition-all border border-blue-100"><FileSpreadsheet size={16} /> Export ke Spreadsheet</button></div>
+                            <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
+                              <div className="flex items-center gap-3 bg-slate-50 px-4 py-2 rounded-2xl flex-1 w-full border border-slate-100">
+                                <Search size={16} className="text-slate-400" />
+                                <input type="text" placeholder="CARI NO. URUT, NAMA, ARMADA, ATAU NO KURSI..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="bg-transparent font-bold text-xs outline-none w-full" />
+                              </div>
+                              <button onClick={exportToCSV} className="flex items-center gap-2 bg-blue-50 text-blue-700 px-5 py-3 rounded-2xl text-[10px] font-black uppercase hover:bg-blue-100 transition-all border border-blue-100"><FileSpreadsheet size={16} /> Export ke Spreadsheet</button>
+                            </div>
                             <div className="overflow-x-auto -mx-6">
                                 <table className="w-full text-left text-[10px]">
                                     <thead className="bg-slate-50 text-slate-400 font-black uppercase border-y border-slate-100">
-                                        <tr>
-                                            <th className="px-4 py-4 text-center">No</th>
-                                            <th className="px-6 py-4">Jamaah</th>
-                                            <th className="px-6 py-4 text-right">Pembayaran</th>
-                                            <th className="px-6 py-4 text-center">Aksi</th>
-                                        </tr>
+                                      <tr>
+                                        <th className="pl-6 pr-2 py-4 w-12 text-center">No.</th>
+                                        <th className="px-4 py-4">Jamaah</th>
+                                        <th className="px-6 py-4 text-right">Pembayaran</th>
+                                        <th className="px-6 py-4 text-center">Aksi</th>
+                                      </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-50">
-                                        {registrations
-                                            .filter(r => (r.nama || '').includes(searchTerm.toUpperCase()) || (r.kursi || '').includes(searchTerm))
-                                            .sort((a,b) => a.bus.localeCompare(b.bus) || Number(a.kursi) - Number(b.kursi))
-                                            .map((reg, index) => (
-                                                <tr key={reg.id} className="hover:bg-slate-50/50">
-                                                    <td className="px-4 py-4 text-center font-black text-slate-500">{index + 1}</td>
-                                                    <td className="px-6 py-4">
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center font-black text-green-800 text-[10px]">{reg.kursi}</div>
-                                                            <div>
-                                                                <p className="font-black text-slate-800 uppercase">{reg.nama}</p>
-                                                                <p className="text-[7px] font-bold text-slate-400">{reg.bus} • {reg.alamat}</p>
-                                                            </div>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-6 py-4 text-right">
-                                                        <p className={`text-[8px] font-black ${reg.statusPembayaran === 'Lunas' ? 'text-green-600' : 'text-amber-600'}`}>{reg.statusPembayaran.toUpperCase()}</p>
-                                                        <p className="font-black text-slate-700">Rp {Number(reg.jumlahBayar || 0).toLocaleString()}</p>
-                                                    </td>
-                                                    <td className="px-6 py-4">
-                                                        <div className="flex gap-2 justify-center">
-                                                            <button onClick={() => {setFormData(reg); setEditingId(reg.id); setActiveTab('registration');}} className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Edit2 size={12}/></button>
-                                                            <button onClick={() => setDeleteTarget({id: reg.id, nama: reg.nama, type: 'jamaah'})} className="p-2 bg-red-50 text-red-600 rounded-lg"><Trash2 size={12}/></button>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            ))}
+                                        {filteredRegistrations.map(reg => (
+                                            <tr key={reg.id} className="hover:bg-slate-50/50">
+                                              <td className="pl-6 pr-2 py-4 text-center font-black text-slate-500">{reg.noUrut}</td>
+                                              <td className="px-4 py-4">
+                                                <div className="flex items-center gap-3">
+                                                  <div className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center font-black text-green-800 text-[10px] shrink-0">{reg.kursi}</div>
+                                                  <div>
+                                                    <p className="font-black text-slate-800 uppercase">{reg.nama}</p>
+                                                    <p className="text-[7px] font-bold text-slate-400">{reg.bus} • {reg.alamat}</p>
+                                                  </div>
+                                                </div>
+                                              </td>
+                                              <td className="px-6 py-4 text-right">
+                                                <p className={`text-[8px] font-black ${reg.statusPembayaran === 'Lunas' ? 'text-green-600' : 'text-amber-600'}`}>{reg.statusPembayaran.toUpperCase()}</p>
+                                                <p className="font-black text-slate-700">Rp {Number(reg.jumlahBayar || 0).toLocaleString()}</p>
+                                              </td>
+                                              <td className="px-6 py-4">
+                                                <div className="flex gap-2 justify-center">
+                                                  <button onClick={() => {setFormData(reg); setEditingId(reg.id); setActiveTab('registration');}} className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Edit2 size={12}/></button>
+                                                  <button onClick={() => setDeleteTarget({id: reg.id, nama: reg.nama, type: 'jamaah'})} className="p-2 bg-red-50 text-red-600 rounded-lg"><Trash2 size={12}/></button>
+                                                </div>
+                                              </td>
+                                            </tr>
+                                        ))}
+                                        {filteredRegistrations.length === 0 && (
+                                          <tr><td colSpan="4" className="px-6 py-10 text-center text-slate-400 font-bold italic uppercase">Belum ada data jamaah</td></tr>
+                                        )}
                                     </tbody>
                                 </table>
                             </div>
