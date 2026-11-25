@@ -285,14 +285,36 @@
               const isBeingEdited = occupiedBy && occupiedBy.id === editingId;
 
               return (
-                <div onClick={() => { if (!isInteractive) return; if (occupiedBy && !isBeingEdited) { alert("Nomor kursi ini sudah diisi!"); return; } setFormData(prev => ({ ...prev, kursi: num.toString() })); }}
-                  className={`relative rounded-xl transition-all flex flex-col items-center justify-start w-16 h-16 sm:w-20 sm:h-20 border-2 ${occupiedBy && !isBeingEdited ? 'bg-red-50 border-red-200 cursor-not-allowed' : isSelected ? 'bg-green-700 border-green-900 text-white z-10' : 'bg-white border-slate-100 text-slate-300 cursor-pointer hover:border-green-300 shadow-sm'}`}
+                <div
+                  onClick={() => {
+                    if (!isInteractive) return;
+                    if (occupiedBy && !isBeingEdited) { alert("Nomor kursi ini sudah diisi!"); return; }
+                    setFormData(prev => ({ ...prev, kursi: num.toString() }));
+                  }}
+                  className={`relative rounded-xl transition-all flex flex-col items-center justify-start w-20 h-24 sm:w-24 sm:h-28 p-1 border-2 ${
+                    occupiedBy && !isBeingEdited
+                      ? 'bg-red-50 border-red-200 cursor-not-allowed'
+                      : isSelected
+                      ? 'bg-green-700 border-green-900 text-white z-10'
+                      : 'bg-white border-slate-100 text-slate-300 cursor-pointer hover:border-green-300 shadow-sm'
+                  }`}
                 >
-                  <span className={`text-[10px] font-black mt-1 ${isSelected ? 'text-green-200' : 'text-slate-400'}`}>{num}</span>
-                  <div className="flex-1 flex flex-col items-center justify-center w-full px-1 overflow-hidden">
+                  <span className={`text-[10px] font-black leading-none mt-0.5 ${isSelected ? 'text-green-200' : 'text-slate-400'}`}>
+                    {num}
+                  </span>
+                  <div className="flex-1 flex flex-col items-center justify-center w-full px-0.5 overflow-hidden">
                     {occupiedBy && !isBeingEdited ? (
-                      <div className="w-full text-center"><p className="text-[8px] leading-tight font-black text-red-700 uppercase break-words">{occupiedBy.nama}</p><p className="text-[6px] font-bold text-red-400 uppercase tracking-tighter">{occupiedBy.alamat.substring(0, 8)}</p></div>
-                    ) : ( <Armchair size={14} className="opacity-20 mb-1" /> )}
+                      <div className="w-full text-center flex flex-col gap-0.5">
+                        <p className="text-[7.5px] sm:text-[8px] leading-[1.1] font-black text-red-700 uppercase break-words">
+                          {occupiedBy.nama}
+                        </p>
+                        <p className="text-[6.5px] sm:text-[7px] leading-[1.15] font-bold text-red-500 uppercase break-words">
+                          {occupiedBy.alamat}
+                        </p>
+                      </div>
+                    ) : (
+                      <Armchair size={14} className="opacity-20 mb-1" />
+                    )}
                   </div>
                 </div>
               );
@@ -315,8 +337,8 @@
                   <div className="flex gap-1.5 mb-2 items-center">
                     <SeatBox num={1} />
                     <div className="w-6 sm:w-10"></div>
-                    <div className="w-16 sm:w-20"></div>
-                    <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl bg-slate-100 border-2 border-slate-200 flex flex-col items-center justify-center shadow-inner">
+                    <div className="w-20 sm:w-24"></div>
+                    <div className="w-20 h-24 sm:w-24 sm:h-28 rounded-xl bg-slate-100 border-2 border-slate-200 flex flex-col items-center justify-center shadow-inner">
                       <div className="w-7 h-7 bg-slate-300 rounded-full flex items-center justify-center mb-1">
                         <div className="w-4 h-4 border-2 border-white rounded-full"></div>
                       </div>
@@ -326,7 +348,7 @@
 
                   {/* Baris 2: Akses Pintu Kiri (Kosong) + Kursi 4, 3, 2 */}
                   <div className="flex gap-1.5 mb-2 items-center">
-                    <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl border-2 border-dashed border-slate-200 flex items-center justify-center">
+                    <div className="w-20 h-24 sm:w-24 sm:h-28 rounded-xl border-2 border-dashed border-slate-200 flex items-center justify-center">
                       <span className="text-[8px] font-black text-slate-300 uppercase">PINTU</span>
                     </div>
                     <div className="w-6 sm:w-10"></div>
@@ -339,7 +361,7 @@
                   <div className="flex gap-1.5 mb-2 items-center">
                     <SeatBox num={7} />
                     <div className="w-6 sm:w-10"></div>
-                    <div className="w-16 sm:w-20"></div>
+                    <div className="w-20 sm:w-24"></div>
                     <SeatBox num={6} />
                     <SeatBox num={5} />
                   </div>
